@@ -3,7 +3,8 @@
 ## priority 1
 
 -   [x] add github webhook on deploy
--   [ ] git pull on github push event
+-   [x] support for cloning private repos using the auth token
+-   [x] git pull on github push event
 
 ## priority 2
 

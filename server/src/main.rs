@@ -8,6 +8,7 @@ use tide::{
 mod config;
 mod git;
 mod github;
+use git::GitCloneError;
 
 // GET /ping
 async fn ping(_req: Request<()>) -> Result {
@@ -17,6 +18,12 @@ async fn ping(_req: Request<()>) -> Result {
 // POST /handler
 // this endpoint is for github webhooks, and not the user
 async fn handler(req: Request<()>) -> Result {
+    if req.header("X-GitHub-Event").is_none() {
+        return Ok(Response::builder(400)
+            .body("this endpoint is reserved for GitHub webhooks")
+            .build());
+    }
+
     github::webhook_handler(req).await
 }
 
@@ -29,16 +36,19 @@ pub struct DeployParams {
 async fn deploy(mut req: Request<()>) -> Result {
     let params: DeployParams = req.body_json().await?;
     let repo_url = format!("https://github.com/{}", &params.repo);
-    let success = git::clone(&repo_url, params.force.unwrap_or(false)).await;
 
-    if success {
-        github::init_repo(&params.repo).await?;
+    match git::clone(&repo_url, params.force.unwrap_or(false)).await {
+        Ok(_) => {
+            github::init_repo(&params.repo).await?;
 
-        return Ok(format!("Successfully cloned {}", &params.repo).into());
-    } else {
-        return Ok(Response::builder(400)
-            .body("Error while cloning: already exists. Run with `force: true` to force re-reploy!")
-            .build());
+            return Ok(format!("Successfully cloned {}", &params.repo).into());
+        }
+        Err(e) => {
+           return Ok(match e{
+            GitCloneError::Exists => Response::builder(400).body("Error while cloning: already exists. Run with `force: true` to force re-reploy!").build(),
+            GitCloneError::NotFound => Response::builder(404).body("Error while cloning: repository not found!").build(),
+        })
+        }
     }
 }
 
@@ -47,7 +57,6 @@ lazy_static! {
     static ref PROJECT_DIRS: ProjectDirs = ProjectDirs::from("", "beni69", "pie").unwrap();
 }
 
-// #[tokio::main]
 #[async_std::main]
 async fn main() -> Result<()> {
     dbg!(&CONFIG.url);

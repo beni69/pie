@@ -1,19 +1,33 @@
-use crate::{CONFIG, PROJECT_DIRS};
+use crate::{git, CONFIG, PROJECT_DIRS};
 use async_std::{
     fs,
     path::{Path, PathBuf},
 };
 use octocrab::Octocrab;
 use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::time::SystemTime;
 
 lazy_static! {
-    static ref CRAB: Octocrab = Octocrab::builder().build().unwrap();
+    static ref CRAB: Octocrab = Octocrab::builder()
+        .personal_token(String::from(&CONFIG.gh_token))
+        .build()
+        .unwrap();
     static ref CLIENT: Client = reqwest::Client::builder()
         .user_agent("pie/0.1.0-alpha.1")
         .build()
         .unwrap();
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct GitHubHookBody {
+    // repository: Repository,
+    repository: GitHubHookRepo,
+}
+#[derive(Serialize, Deserialize, Debug)]
+struct GitHubHookRepo {
+    full_name: String,
 }
 
 pub async fn init_repo(repo_name: &str) -> reqwest::Result<()> {
@@ -51,11 +65,27 @@ pub async fn webhook_handler(mut req: tide::Request<()>) -> tide::Result {
             &hooks_folder.as_path(),
             format!("{date}-{event}.json", date = hook_id, event = hook_event),
         ),
-        req_body,
+        &req_body,
     )
     .await?;
 
-    Ok("".into())
+    return match hook_event {
+        "ping" => Ok("pong".into()),
+        "push" => {
+            println!("push");
+
+            let body: GitHubHookBody = match serde_json::from_str(&req_body) {
+                Ok(b) => b,
+                Err(e) => panic!("{}", e),
+            };
+
+            git::pull(&body.repository.full_name).await.unwrap();
+
+            return Ok("pull successful".into());
+        }
+
+        _ => Ok(tide::Response::builder(404).body("event not found").build()),
+    };
 }
 
 pub fn get_unix_time() -> u128 {
