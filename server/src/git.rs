@@ -1,8 +1,8 @@
-use crate::{CONFIG, PROJECT_DIRS};
-use async_std::{
-    fs,
-    path::{Path, PathBuf},
+use crate::{
+    utils::{repo_to_path, repo_to_url},
+    CONFIG,
 };
+use async_std::{fs, path::PathBuf};
 use git2::{build::RepoBuilder, Cred, Error, ErrorCode, FetchOptions, RemoteCallbacks, Repository};
 
 pub enum GitCloneError {
@@ -11,17 +11,10 @@ pub enum GitCloneError {
 }
 
 pub async fn clone(repo: &str, force: bool) -> Result<(), GitCloneError> {
-    // get directory name to clone to from url
-    let mut dirname: String = String::from(repo);
-    if dirname.ends_with(".git") {
-        dirname = dirname.strip_suffix(".git").unwrap().to_string();
-    };
-    dirname = PROJECT_DIRS.data_local_dir().to_str().unwrap().to_string()
-        + "/repos/"
-        + (dirname.split('/').collect::<Vec<&str>>()).last().unwrap();
+    let dirname = repo_to_path(repo);
 
     // directory exists
-    let dir_exists = Path::new(&dirname).exists().await;
+    let dir_exists = dirname.exists().await;
     if dir_exists && force {
         match fs::remove_dir_all(&dirname).await {
             Err(e) => panic!("{}", e),
@@ -43,17 +36,17 @@ pub async fn clone(repo: &str, force: bool) -> Result<(), GitCloneError> {
     fetch_opts.remote_callbacks(callbacks);
     builder.fetch_options(fetch_opts);
 
-    return match builder.clone(&repo, std::path::PathBuf::from(&dirname).as_path()) {
+    return match builder.clone(
+        &repo_to_url(repo),
+        std::path::PathBuf::from(&dirname).as_path(),
+    ) {
         Ok(_) => Ok(()),
         Err(_) => Err(GitCloneError::NotFound),
     };
 }
 
 pub async fn pull(repo: &str) -> Result<(), Error> {
-    let r = (repo.split('/')).collect::<Vec<&str>>();
-    let mut repo_dir = PathBuf::from(PROJECT_DIRS.data_local_dir());
-    repo_dir.push("repos");
-    repo_dir.push(r[1]);
+    let repo_dir = repo_to_path(repo);
     let repo = Repository::open(&repo_dir)?;
 
     dbg!(repo.path());

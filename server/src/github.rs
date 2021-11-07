@@ -1,4 +1,5 @@
-use crate::{git, CONFIG, PROJECT_DIRS};
+use crate::utils::get_unix_time;
+use crate::{git, runner, CONFIG, PROJECT_DIRS};
 use async_std::{
     fs,
     path::{Path, PathBuf},
@@ -7,7 +8,6 @@ use octocrab::Octocrab;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::time::SystemTime;
 
 lazy_static! {
     static ref CRAB: Octocrab = Octocrab::builder()
@@ -81,16 +81,11 @@ pub async fn webhook_handler(mut req: tide::Request<()>) -> tide::Result {
 
             git::pull(&body.repository.full_name).await.unwrap();
 
+            runner::run(&body.repository.full_name).await?;
+
             return Ok("pull successful".into());
         }
 
         _ => Ok(tide::Response::builder(404).body("event not found").build()),
     };
-}
-
-pub fn get_unix_time() -> u128 {
-    match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
-        Ok(t) => t.as_millis(),
-        Err(_) => 0,
-    }
 }

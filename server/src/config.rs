@@ -12,9 +12,9 @@ pub struct Config {
 impl std::default::Default for Config {
     fn default() -> Self {
         Self {
-            url: "Joe".into(),
+            url: "https://example.com".into(),
             port: Some(6969),
-            gh_token: "".into(),
+            gh_token: "<your github token>".into(),
         }
     }
 }

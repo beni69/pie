@@ -1,14 +1,16 @@
 #[macro_use]
 extern crate lazy_static;
 use directories::ProjectDirs;
+use git::GitCloneError;
 use tide::{
     prelude::{Deserialize, Serialize},
-    Request, Response, Result,
+    Redirect, Request, Response, Result,
 };
 mod config;
 mod git;
 mod github;
-use git::GitCloneError;
+mod runner;
+mod utils;
 
 // GET /ping
 async fn ping(_req: Request<()>) -> Result {
@@ -35,11 +37,12 @@ pub struct DeployParams {
 }
 async fn deploy(mut req: Request<()>) -> Result {
     let params: DeployParams = req.body_json().await?;
-    let repo_url = format!("https://github.com/{}", &params.repo);
 
-    match git::clone(&repo_url, params.force.unwrap_or(false)).await {
+    match git::clone(&params.repo, params.force.unwrap_or(false)).await {
         Ok(_) => {
             github::init_repo(&params.repo).await?;
+
+            runner::run(&params.repo).await?;
 
             return Ok(format!("Successfully cloned {}", &params.repo).into());
         }
@@ -59,11 +62,10 @@ lazy_static! {
 
 #[async_std::main]
 async fn main() -> Result<()> {
-    dbg!(&CONFIG.url);
-
     let mut app = tide::new();
     app.with(driftwood::DevLogger);
-    app.at("/").get(ping);
+    app.at("/")
+        .get(Redirect::new("https://github.com/beni69/pie"));
     app.at("/ping").get(ping);
     app.at("/handler").all(handler);
     app.at("/deploy").post(deploy);
