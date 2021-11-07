@@ -23,13 +23,13 @@ pub fn _url_to_repo(url: &str) -> String {
     path[0].to_owned() + "/" + path[1]
 }
 
-pub fn _split_repo(repo: &str) -> (&str, &str) {
+pub fn split_repo(repo: &str) -> (&str, &str) {
     let v = repo.split('/').collect::<Vec<&str>>();
     (v[0], v[1])
 }
 
 pub fn repo_to_path(repo: &str) -> PathBuf {
-    let r = _split_repo(repo);
+    let r = split_repo(repo);
 
     let mut d = PathBuf::from(PROJECT_DIRS.data_local_dir());
     d.push("repos");
@@ -37,4 +37,10 @@ pub fn repo_to_path(repo: &str) -> PathBuf {
     d.push(r.1);
 
     d
+}
+
+pub fn string_to_cmd_and_args(s: &str) -> (&str, Vec<&str>) {
+    let v = s.split_ascii_whitespace().collect::<Vec<&str>>();
+    let first = v.split_first().unwrap_or((&"", &[]));
+    (*first.0, first.1.to_vec())
 }

@@ -1,13 +1,18 @@
 # server
 
-## priority 1
+## auto-clone
 
 -   [x] add github webhook on deploy
 -   [x] support for cloning private repos using the auth token
 -   [x] git pull on github push event
 
-## priority 2
+## auto-run
 
--   [ ] autostart projects
--   -   [ ] nodejs support (auto detect)
--   -   [ ] custom deploy configs (build command, start command)
+-   [ ] specify `install`, `build`, `start` commands in a config file
+
+-   [ ] audo-detect projects
+-   -   [ ] node.js
+
+## misc
+
+-   [ ] deploy from local machine (no github)

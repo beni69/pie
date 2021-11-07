@@ -81,7 +81,7 @@ pub async fn webhook_handler(mut req: tide::Request<()>) -> tide::Result {
 
             git::pull(&body.repository.full_name).await.unwrap();
 
-            runner::run(&body.repository.full_name).await?;
+            runner::run(&body.repository.full_name).await.unwrap();
 
             return Ok("pull successful".into());
         }

@@ -2,6 +2,7 @@
 extern crate lazy_static;
 use directories::ProjectDirs;
 use git::GitCloneError;
+use runner::RunnerError;
 use tide::{
     prelude::{Deserialize, Serialize},
     Redirect, Request, Response, Result,
@@ -42,9 +43,13 @@ async fn deploy(mut req: Request<()>) -> Result {
         Ok(_) => {
             github::init_repo(&params.repo).await?;
 
-            runner::run(&params.repo).await?;
-
-            return Ok(format!("Successfully cloned {}", &params.repo).into());
+            match runner::run(&params.repo).await{
+                Ok(_) => Ok(format!("Successfully cloned {}", &params.repo).into()),
+                Err(e) => Ok(match e {
+                    RunnerError::CommandsNotFound => Response::builder(400).body("Error while running: no commands specified!").build(),
+                    RunnerError::CommandFailed => Response::builder(400).body("Error while running commands!").build(),
+                }),
+            }
         }
         Err(e) => {
            return Ok(match e{
@@ -56,7 +61,7 @@ async fn deploy(mut req: Request<()>) -> Result {
 }
 
 lazy_static! {
-    static ref CONFIG: config::Config = config::get_config();
+    static ref CONFIG: config::ServerConfig = config::get_server_config();
     static ref PROJECT_DIRS: ProjectDirs = ProjectDirs::from("", "beni69", "pie").unwrap();
 }
 
