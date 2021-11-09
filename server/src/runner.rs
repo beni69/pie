@@ -1,5 +1,5 @@
 use crate::{
-    config::get_repo_config,
+    config::{get_repo_config, RepoConfigError},
     utils::{repo_to_path, string_to_cmd_and_args},
 };
 use async_std::{
@@ -10,8 +10,8 @@ use std::{io::Error, result::Result};
 
 #[derive(Debug)]
 pub enum RunnerError {
-    CommandsNotFound,
     CommandFailed,
+    RepoConfigError(RepoConfigError),
 }
 
 async fn exec(cmd: &str, args: Vec<&str>, dir: PathBuf) -> Result<String, Error> {
@@ -33,6 +33,8 @@ async fn run_repo_cmd(cmd: &str, p: PathBuf) -> Result<String, RunnerError> {
 
     if cmd_res.is_ok() {
         println!("{}", cmd_res.as_ref().unwrap());
+    } else {
+        println!("command falied!\n{:?}", cmd_res.as_ref().err().unwrap());
     }
 
     match cmd_res {
@@ -45,14 +47,18 @@ pub async fn run(repo: &str) -> Result<(), RunnerError> {
     let repo_path = repo_to_path(repo);
     let repo_config_res = get_repo_config(repo_path.clone()).await;
 
-    if repo_config_res.is_none() {
-        return Err(RunnerError::CommandsNotFound);
+    if repo_config_res.is_err() {
+        return Err(RunnerError::RepoConfigError(repo_config_res.err().unwrap()));
     };
 
-    let repo_config = repo_config_res.unwrap();
+    let repo_config = repo_config_res.ok().unwrap();
+    dbg!(&repo_config);
 
+    println!("running install command");
     run_repo_cmd(&repo_config.install_command.unwrap(), repo_path.clone()).await?;
+    println!("running build command");
     run_repo_cmd(&repo_config.build_command.unwrap(), repo_path.clone()).await?;
+    println!("running start command");
     run_repo_cmd(&repo_config.start_command, repo_path.clone()).await?;
 
     Ok(())

@@ -1,7 +1,7 @@
 #[macro_use]
 extern crate lazy_static;
+use crate::{config::RepoConfigError, git::GitCloneError};
 use directories::ProjectDirs;
-use git::GitCloneError;
 use runner::RunnerError;
 use tide::{
     prelude::{Deserialize, Serialize},
@@ -43,12 +43,17 @@ async fn deploy(mut req: Request<()>) -> Result {
         Ok(_) => {
             github::init_repo(&params.repo).await?;
 
-            match runner::run(&params.repo).await{
+            match runner::run(&params.repo).await {
                 Ok(_) => Ok(format!("Successfully cloned {}", &params.repo).into()),
                 Err(e) => Ok(match e {
-                    RunnerError::CommandsNotFound => Response::builder(400).body("Error while running: no commands specified!").build(),
                     RunnerError::CommandFailed => Response::builder(400).body("Error while running commands!").build(),
+                    RunnerError::RepoConfigError(e) => match e {
+                        RepoConfigError::InvalidTOML => Response::builder(400).body("pie.toml is not a valid TOML file.").build(),
+                        RepoConfigError::MissingCommands => Response::builder(400).body("Your project type could not be auto-detected, and your pie.toml doesn't exist, or doesn't have a start command.").build(),
+                    },
+
                 }),
+
             }
         }
         Err(e) => {
@@ -77,5 +82,6 @@ async fn main() -> Result<()> {
     let host = format!("127.0.0.1:{}", &CONFIG.port.unwrap());
     println!("listening on: http://{}", host);
     app.listen(&host).await?;
+
     Ok(())
 }
