@@ -1,19 +1,13 @@
 [package]
-name = "pie-server"
+name = "pie-lib"
 version = "0.1.0-alpha.1"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-pie-lib = { path = "../lib" }
-async-std = { version = "1", features = ["attributes", "tokio1"] }
+async-std = "1.10.0"
 directories = "4.0.1"
-driftwood = "0.0.6"
-git2 = "0.13.23"
 lazy_static = "1.4.0"
-octocrab = "0.13.0"
-reqwest = { version = "0.11.6", features = ["json"] }
 serde = { version = "1.0.130", features = ["derive"] }
-serde_json = "1.0.68"
-tide = "0.16.0"
+serde_json = "1.0.70"
 toml = "0.5.8"

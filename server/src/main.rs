@@ -1,13 +1,13 @@
 #[macro_use]
 extern crate lazy_static;
-use crate::{config::RepoConfigError, git::GitCloneError};
+use crate::git::GitCloneError;
 use directories::ProjectDirs;
+use pie_lib::config::{get_server_config, RepoConfigError, ServerConfig};
 use runner::RunnerError;
 use tide::{
     prelude::{Deserialize, Serialize},
     Redirect, Request, Response, Result,
 };
-mod config;
 mod git;
 mod github;
 mod runner;
@@ -66,7 +66,7 @@ async fn deploy(mut req: Request<()>) -> Result {
 }
 
 lazy_static! {
-    static ref CONFIG: config::ServerConfig = config::get_server_config();
+    static ref CONFIG: ServerConfig = get_server_config();
     static ref PROJECT_DIRS: ProjectDirs = ProjectDirs::from("", "beni69", "pie").unwrap();
 }
 

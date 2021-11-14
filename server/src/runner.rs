@@ -1,11 +1,9 @@
-use crate::{
-    config::{get_repo_config, RepoConfigError},
-    utils::{repo_to_path, string_to_cmd_and_args},
-};
+use crate::utils::{repo_to_path, string_to_cmd_and_args};
 use async_std::{
     path::PathBuf,
     process::{Command, Stdio},
 };
+use pie_lib::config::{get_repo_config, RepoConfigError};
 use std::{io::Error, result::Result};
 
 #[derive(Debug)]
@@ -54,10 +52,14 @@ pub async fn run(repo: &str) -> Result<(), RunnerError> {
     let repo_config = repo_config_res.ok().unwrap();
     dbg!(&repo_config);
 
-    println!("running install command");
-    run_repo_cmd(&repo_config.install_command.unwrap(), repo_path.clone()).await?;
-    println!("running build command");
-    run_repo_cmd(&repo_config.build_command.unwrap(), repo_path.clone()).await?;
+    if repo_config.install_command.is_some() {
+        println!("running install command");
+        run_repo_cmd(&repo_config.install_command.unwrap(), repo_path.clone()).await?;
+    }
+    if repo_config.build_command.is_some() {
+        println!("running build command");
+        run_repo_cmd(&repo_config.build_command.unwrap(), repo_path.clone()).await?;
+    }
     println!("running start command");
     run_repo_cmd(&repo_config.start_command, repo_path.clone()).await?;
 

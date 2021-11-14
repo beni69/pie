@@ -1,6 +1,7 @@
 use crate::PROJECT_DIRS;
-use async_std::path::PathBuf;
+use async_std::{fs::read_to_string, path::PathBuf};
 use serde::{Deserialize, Serialize};
+use serde_json;
 use std::default::Default;
 use toml;
 
@@ -54,14 +55,14 @@ fn create_default_server_config(path: &str) -> Result<ServerConfig, std::io::Err
 
 // === REPO CONFIG ===
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
 pub struct RepoConfigFile {
     pub _type: Option<String>,
     pub install_command: Option<String>,
     pub build_command: Option<String>,
     pub start_command: Option<String>,
 }
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct RepoConfig {
     pub _type: Option<RepoConfigTypes>,
     pub install_command: Option<String>,
@@ -83,6 +84,7 @@ impl Default for RepoConfig {
 #[derive(Debug, Serialize, Deserialize)]
 pub enum RepoConfigTypes {
     NodeJS,
+    NodeTS,
 }
 
 #[derive(Debug)]
@@ -95,15 +97,16 @@ pub async fn get_repo_config(path: PathBuf) -> Result<RepoConfig, RepoConfigErro
     let mut p = path.clone();
     p.push("pie.toml");
 
-    let config_file_res: Result<Option<RepoConfig>, RepoConfigError> =
-        match async_std::fs::read_to_string(p).await {
-            Ok(s) => match toml::from_str(&s) {
-                Ok(s) => Ok(s),
-                Err(_) => Err(RepoConfigError::InvalidTOML),
-            },
-            Err(_) => Ok(None),
-        };
+    let config_file_res = match read_to_string(p).await {
+        Ok(s) => match toml::from_str::<RepoConfig>(&s) {
+            Ok(x) => Ok(Some(x)),
+            Err(_) => Err(RepoConfigError::InvalidTOML),
+        },
+        Err(_) => Ok(None),
+    };
+
     if config_file_res.is_err() {
+        dbg!("invalid config file");
         return Err(RepoConfigError::InvalidTOML);
     };
     let config_file = config_file_res.ok().unwrap().unwrap_or_default();
@@ -116,8 +119,11 @@ pub async fn get_repo_config(path: PathBuf) -> Result<RepoConfig, RepoConfigErro
 
     Ok(RepoConfig {
         _type: value_or_def(config_file._type, default_config._type),
-        install_command: value_or_def(config_file.install_command, default_config.install_command),
-        build_command: value_or_def(config_file.build_command, default_config.build_command),
+        install_command: value_or_def_null(
+            config_file.install_command,
+            default_config.install_command,
+        ),
+        build_command: value_or_def_null(config_file.build_command, default_config.build_command),
         start_command: if config_file.start_command != "".to_string() {
             config_file.start_command
         } else {
@@ -130,19 +136,93 @@ async fn get_default_repo_config(path: PathBuf) -> Result<RepoConfig, RepoConfig
     let mut pkg_json = path.clone();
     pkg_json.push("package.json");
 
+    //== NODE PROJECT ==//
     if pkg_json.is_file().await {
-        return Ok(RepoConfig {
-            install_command: Some("npm install".into()),
-            build_command: Some("npm run build".into()),
-            start_command: "npm run start".into(),
-            _type: Some(RepoConfigTypes::NodeJS),
-        });
+        let j = parse_pkg_json(pkg_json.clone()).await;
+        let install_command = if use_yarn(path.clone()).await {
+            "npm install".to_string()
+        } else {
+            "yarn install".to_string()
+        };
+
+        if j.is_some() {
+            let j = j.unwrap();
+            let build_command = if j.scripts.pie_build.is_some() {
+                j.scripts.pie_build
+            } else {
+                j.scripts.build
+            };
+            let start_command = if j.scripts.pie_start.is_some() {
+                j.scripts.pie_start.unwrap()
+            } else {
+                if j.scripts.start.is_some() {
+                    j.scripts.start.unwrap()
+                } else {
+                    "node .".into()
+                }
+            };
+
+            return Ok(RepoConfig {
+                _type: Some(RepoConfigTypes::NodeJS),
+                install_command: Some(install_command),
+                build_command: build_command,
+                start_command: start_command,
+            });
+        } else {
+            // no sensible defaults found, returning to the primitive way
+            return Ok(RepoConfig {
+                _type: Some(RepoConfigTypes::NodeJS),
+                install_command: Some("npm install".into()),
+                build_command: None,
+                start_command: "npm run start".into(),
+            });
+        }
     };
 
     Err(RepoConfigError::MissingCommands)
 }
 
+#[derive(Debug, Deserialize)]
+struct PackageJSON {
+    scripts: PackageJSONScripts,
+}
+#[derive(Debug, Deserialize)]
+struct PackageJSONScripts {
+    build: Option<String>,
+    start: Option<String>,
+    pie_build: Option<String>,
+    pie_start: Option<String>,
+}
+async fn parse_pkg_json(path: PathBuf) -> Option<PackageJSON> {
+    let file = read_to_string(path).await;
+    if file.is_err() {
+        return None;
+    }
+    let j = serde_json::from_str::<PackageJSON>(&file.unwrap());
+
+    match j {
+        Ok(j) => Some(j),
+        Err(_) => None,
+    }
+}
+
+async fn use_yarn(path: PathBuf) -> bool {
+    let mut p = path.clone();
+    p.push("yarn.lock");
+    p.is_file().await
+}
+
 fn value_or_def<T>(value: Option<T>, def: Option<T>) -> Option<T> {
+    if value.is_some() {
+        return value;
+    }
+    def
+}
+fn value_or_def_null(value: Option<String>, def: Option<String>) -> Option<String> {
+    if value == Some("NONE".into()) {
+        dbg!("value {} is NONE", value);
+        return None;
+    }
     if value.is_some() {
         return value;
     }
