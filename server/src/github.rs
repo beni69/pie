@@ -1,52 +1,102 @@
-use crate::utils::get_unix_time;
 use crate::{git, runner, CONFIG, PROJECT_DIRS};
 use async_std::{
     fs,
     path::{Path, PathBuf},
 };
-use octocrab::Octocrab;
-use reqwest::Client;
+use pie_lib::utils::{get_unix_time, split_repo};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use surf::{Client, Error, StatusCode, Url};
 
 lazy_static! {
-    static ref CRAB: Octocrab = Octocrab::builder()
-        .personal_token(String::from(&CONFIG.gh_token))
-        .build()
+    static ref CLIENT: Client = surf::Config::new()
+        .set_base_url(Url::parse("https://api.github.com").unwrap())
+        .add_header("Accept", "application/vnd.github.v3+json")
+        .unwrap()
+        .add_header("Authorization", format!("token {}", CONFIG.gh_token))
+        .unwrap()
+        .try_into()
         .unwrap();
-    static ref CLIENT: Client = reqwest::Client::builder()
-        .user_agent("pie/0.1.0-alpha.1")
-        .build()
-        .unwrap();
+}
+
+#[derive(Debug)]
+pub enum GitHubError {
+    NotFound,
+    AccessDenied,
+    Http(Error),
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 struct GitHubHookBody {
-    // repository: Repository,
-    repository: GitHubHookRepo,
+    repository: GitHubRepository,
 }
 #[derive(Serialize, Deserialize, Debug)]
-struct GitHubHookRepo {
+struct GitHubRepository {
     full_name: String,
+    hooks_url: String,
 }
 
-pub async fn init_repo(repo_name: &str) -> reqwest::Result<()> {
-    let r = (repo_name.split('/')).collect::<Vec<&str>>();
+async fn get_repo(repo_name: &str) -> Result<GitHubRepository, GitHubError> {
+    let r = split_repo(repo_name);
 
-    let repo = CRAB.repos(r[0], r[1]).get().await.unwrap();
+    let res = CLIENT
+        .get(format!("/repos/{owner}/{repo}", owner = r.0, repo = r.1))
+        .send()
+        .await;
+
+    if res.is_err() {
+        return Err(GitHubError::Http(res.unwrap_err()));
+    }
+    let mut res = res.unwrap();
+
+    if res.status() == StatusCode::NotFound {
+        return Err(GitHubError::NotFound);
+    }
+
+    let data = res.body_json::<GitHubRepository>().await;
+
+    if data.is_err() {
+        return Err(GitHubError::Http(data.unwrap_err()));
+    }
+    let data = data.unwrap();
+
+    Ok(data)
+}
+
+pub async fn init_repo(repo_name: &str) -> Result<(), GitHubError> {
+    let r = split_repo(repo_name);
+
+    let repo = get_repo(repo_name).await;
+    if repo.is_err() {
+        return Err(repo.unwrap_err());
+    }
+    let _repo = repo?;
 
     let j = json!({"name": "web", "config": {"url": String::from(&CONFIG.url) + "/handler", "content_type": "json"}});
 
-    let _res = CLIENT
-        .post(repo.hooks_url.as_str())
-        .header("accept", "application/vnd.github.v3+json")
-        .header("Authorization", format!("token {}", CONFIG.gh_token))
-        .header("content-type", "application/json")
-        .body(j.to_string())
+    let res = CLIENT
+        .post(format!(
+            "/repos/{owner}/{repo}/hooks",
+            owner = r.0,
+            repo = r.1
+        ))
+        .body(j)
         .send()
-        .await?;
+        .await;
 
-    Ok(())
+    match res {
+        Ok(r) => {
+            if r.status() == StatusCode::NotFound {
+                Err(GitHubError::AccessDenied)
+            } else {
+                Ok(())
+            }
+        }
+        Err(e) => {
+            dbg!(&e);
+            Err(GitHubError::Http(e))
+        }
+    }
 }
 
 pub async fn webhook_handler(mut req: tide::Request<()>) -> tide::Result {

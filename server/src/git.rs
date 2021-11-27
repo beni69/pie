@@ -1,16 +1,14 @@
-use crate::{
-    utils::{repo_to_path, repo_to_url},
-    CONFIG,
-};
+use crate::CONFIG;
 use async_std::{fs, path::PathBuf};
 use git2::{build::RepoBuilder, Cred, Error, ErrorCode, FetchOptions, RemoteCallbacks, Repository};
+use pie_lib::utils::{repo_to_path, repo_to_url};
 
-pub enum GitCloneError {
+pub enum GitError {
     Exists,
     NotFound,
 }
 
-pub async fn clone(repo: &str, force: bool) -> Result<(), GitCloneError> {
+pub async fn clone(repo: &str, force: bool) -> Result<(), GitError> {
     let dirname = repo_to_path(repo);
 
     // directory exists
@@ -21,7 +19,7 @@ pub async fn clone(repo: &str, force: bool) -> Result<(), GitCloneError> {
             Ok(x) => x,
         };
     } else if dir_exists {
-        return Err(GitCloneError::Exists);
+        return Err(GitError::Exists);
     }
 
     let mut builder = RepoBuilder::new();
@@ -41,7 +39,7 @@ pub async fn clone(repo: &str, force: bool) -> Result<(), GitCloneError> {
         std::path::PathBuf::from(&dirname).as_path(),
     ) {
         Ok(_) => Ok(()),
-        Err(_) => Err(GitCloneError::NotFound),
+        Err(_) => Err(GitError::NotFound),
     };
 }
 
@@ -49,10 +47,10 @@ pub async fn pull(repo: &str) -> Result<(), Error> {
     let repo_dir = repo_to_path(repo);
     let repo = Repository::open(&repo_dir)?;
 
-    dbg!(repo.path());
+    info!("pulling repository: {:?}", repo.path());
 
     let branch = &get_current_branch_name(repo_dir).unwrap_or("master".to_string());
-    dbg!(branch);
+    debug!("on branch: {:?}", branch);
 
     let mut callbacks = RemoteCallbacks::new();
     let mut fetch_opts = FetchOptions::new();

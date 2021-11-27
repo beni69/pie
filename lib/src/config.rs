@@ -28,7 +28,7 @@ pub fn get_server_config() -> ServerConfig {
     let config_dir = PROJECT_DIRS.config_dir();
     let config_path = config_dir.join("pie-server.toml");
 
-    dbg!(&config_path);
+    info!("Using server config file at {:?}", &config_path);
 
     let config_file = std::fs::read_to_string(&config_path);
 
@@ -38,7 +38,7 @@ pub fn get_server_config() -> ServerConfig {
             .unwrap_or(ServerConfig::default()),
     };
 
-    dbg!(&config);
+    debug!("{:?}", &config);
 
     return config;
 }
@@ -97,8 +97,9 @@ pub async fn get_repo_config(path: PathBuf) -> Result<RepoConfig, RepoConfigErro
     let mut p = path.clone();
     p.push("pie.toml");
 
-    let config_file_res = match read_to_string(p).await {
+    let config_file_res = match read_to_string(&p).await {
         Ok(s) => match toml::from_str::<RepoConfig>(&s) {
+            // TODO: read file into RepoConfigFile and serialize it into RepoConfig
             Ok(x) => Ok(Some(x)),
             Err(_) => Err(RepoConfigError::InvalidTOML),
         },
@@ -106,7 +107,7 @@ pub async fn get_repo_config(path: PathBuf) -> Result<RepoConfig, RepoConfigErro
     };
 
     if config_file_res.is_err() {
-        dbg!("invalid config file");
+        error!("invalid config file: {:?}", &p);
         return Err(RepoConfigError::InvalidTOML);
     };
     let config_file = config_file_res.ok().unwrap().unwrap_or_default();
@@ -139,24 +140,21 @@ async fn get_default_repo_config(path: PathBuf) -> Result<RepoConfig, RepoConfig
     //== NODE PROJECT ==//
     if pkg_json.is_file().await {
         let j = parse_pkg_json(pkg_json.clone()).await;
-        let install_command = if use_yarn(path.clone()).await {
-            "npm install".to_string()
-        } else {
-            "yarn install".to_string()
-        };
+        let yarn = use_yarn(path.clone()).await;
+        let install_command = npm_yarn_run("install", yarn);
 
         if j.is_some() {
             let j = j.unwrap();
             let build_command = if j.scripts.pie_build.is_some() {
-                j.scripts.pie_build
+                Some(npm_yarn_run("run pie-build", yarn))
             } else {
-                j.scripts.build
+                Some(npm_yarn_run("run build", yarn))
             };
             let start_command = if j.scripts.pie_start.is_some() {
-                j.scripts.pie_start.unwrap()
+                npm_yarn_run("run pie-start", yarn)
             } else {
                 if j.scripts.start.is_some() {
-                    j.scripts.start.unwrap()
+                    npm_yarn_run("run start", yarn)
                 } else {
                     "node .".into()
                 }
@@ -211,6 +209,13 @@ async fn use_yarn(path: PathBuf) -> bool {
     p.push("yarn.lock");
     p.is_file().await
 }
+fn npm_yarn_run(cmd: &str, yarn: bool) -> String {
+    if yarn {
+        format!("yarn {}", cmd)
+    } else {
+        format!("npm {}", cmd)
+    }
+}
 
 fn value_or_def<T>(value: Option<T>, def: Option<T>) -> Option<T> {
     if value.is_some() {
@@ -220,7 +225,7 @@ fn value_or_def<T>(value: Option<T>, def: Option<T>) -> Option<T> {
 }
 fn value_or_def_null(value: Option<String>, def: Option<String>) -> Option<String> {
     if value == Some("NONE".into()) {
-        dbg!("value {} is NONE", value);
+        debug!("value {:?} is NONE", value);
         return None;
     }
     if value.is_some() {

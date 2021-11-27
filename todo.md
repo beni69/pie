@@ -8,10 +8,14 @@
 
 ## auto-run
 
--   [ ] specify `install`, `build`, `start` commands in a config file
+-   [x] specify `install`, `build`, `start` commands in a config file
 
 -   [ ] audo-detect projects
--   -   [ ] node.js
+-   -   [x] node.js
+
+-   [ ] **pie.toml**:
+-   -   [ ] supply env variables
+-   -   [ ] platform-specific configs
 
 ## misc
 
