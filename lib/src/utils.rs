@@ -54,6 +54,24 @@ pub fn repo_to_pie_name(repo: &str) -> String {
     format!("pie-{}-{}", r.0, r.1)
 }
 
+fn get_logs_dir() -> PathBuf {
+    let mut d = PathBuf::from(PROJECT_DIRS.data_local_dir());
+    d.push("logs");
+    d
+}
+pub fn create_logs_dir() -> Result<(), Error> {
+    let d = get_logs_dir();
+    std::fs::create_dir_all(&d)?;
+    Ok(())
+}
+pub fn repo_to_log_file(repo: &str) -> PathBuf {
+    let name = repo_to_pie_name(&repo);
+
+    let mut d = get_logs_dir();
+    d.push(format!("{}.log", name));
+    d
+}
+
 pub fn string_to_cmd_and_args(s: &str) -> (&str, Vec<&str>) {
     let v = s.split_ascii_whitespace().collect::<Vec<&str>>();
     let first = v.split_first().unwrap_or((&"", &[]));

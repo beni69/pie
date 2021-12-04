@@ -1,12 +1,10 @@
-use async_std::{
-    path::PathBuf,
-    process::{Command, Stdio},
-};
+use async_std::{path::PathBuf, process::Command};
 use pie_lib::{
     config::{get_repo_config, RepoConfigError},
-    utils::{repo_to_path, repo_to_pie_name, string_to_cmd_and_args},
+    utils::{repo_to_log_file, repo_to_path, string_to_cmd_and_args},
 };
 use std::{io::Error, result::Result};
+use which::which;
 
 #[derive(Debug)]
 pub enum RunnerError {
@@ -22,27 +20,32 @@ pub async fn exec(cmd: &str, args: Vec<&str>, dir: PathBuf) -> Result<String, Er
         &dir.to_string_lossy()
     );
 
-    let cmd = Command::new(cmd)
-        .args(args)
-        .current_dir(dir)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?;
-
+    let cmd = Command::new(cmd).args(args).current_dir(dir).spawn()?;
     let out = cmd.output().await?;
 
     Ok(String::from_utf8(out.stdout).unwrap_or(String::new()))
 }
 
-// TODO: use restart (or stop and start) instead of start on github events
-async fn exec_pm2(cmd: &str, p: PathBuf, pm2_name: &str) -> Result<String, Error> {
+async fn exec_daemon(cmd: &str, p: PathBuf, repo: &str) -> Result<String, Error> {
+    dbg!();
+
+    let log_file = repo_to_log_file(&repo);
+    if !log_file.exists().await {
+        async_std::fs::write(&log_file, "").await?;
+    }
+
     let cmd_args = string_to_cmd_and_args(&cmd);
     let full_cmd = format!(
-        "pm2 start --name {name} {cmd} -- {args}",
-        name = pm2_name,
-        cmd = cmd_args.0,
+        "daemonize -a -c {dir} -o {logfile} -e {logfile} {cmd} {args}",
+        dir = p.to_str().expect("invalid path"),
+        logfile = log_file.to_str().expect("invalid path"),
+        cmd = which(cmd_args.0)
+            .expect("command not found!")
+            .to_str()
+            .expect("invalid path"),
         args = cmd_args.1.join(" ")
     );
+    dbg!(&full_cmd);
     let full_cmd_args = string_to_cmd_and_args(&full_cmd);
     exec(full_cmd_args.0, full_cmd_args.1, p).await
 }
@@ -50,8 +53,7 @@ async fn exec_pm2(cmd: &str, p: PathBuf, pm2_name: &str) -> Result<String, Error
 async fn run_repo_cmd(cmd: &str, repo: &str, daemonize: bool) -> Result<String, RunnerError> {
     let p = repo_to_path(repo);
     let cmd_res = if daemonize {
-        let repo_str = repo_to_pie_name(&repo);
-        exec_pm2(cmd, p, &repo_str).await
+        exec_daemon(cmd, p, &repo).await
     } else {
         let cmd_args = string_to_cmd_and_args(cmd);
         exec(cmd_args.0, cmd_args.1, p).await

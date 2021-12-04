@@ -12,6 +12,7 @@
 
 -   [ ] audo-detect projects
 -   -   [x] node.js
+-   -   [ ] rust (probably should cross-compile)
 
 -   [ ] **pie.toml**:
 -   -   [ ] supply env variables
@@ -20,3 +21,4 @@
 ## misc
 
 -   [ ] deploy from local machine (no github)
+-   [ ] docker support

@@ -6,7 +6,7 @@ use crate::{git::GitError, github::GitHubError};
 use directories::ProjectDirs;
 use pie_lib::{
     config::{get_server_config, RepoConfigError, ServerConfig},
-    utils::{self, url_to_repo},
+    utils::{create_logs_dir, string_to_cmd_and_args, url_to_repo},
 };
 use runner::RunnerError;
 use tide::{
@@ -98,7 +98,7 @@ async fn deploy(mut req: Request<()>) -> Result {
 // execute a command. (for testing purposes)
 async fn exec(mut req: Request<()>) -> Result {
     let cmd = req.body_string().await?;
-    let c = utils::string_to_cmd_and_args(&cmd);
+    let c = string_to_cmd_and_args(&cmd);
     let res = runner::exec(c.0, c.1, async_std::path::PathBuf::from("/tmp")).await;
     match res {
         Ok(s) => Ok(s.into()),
@@ -116,6 +116,9 @@ async fn main() -> Result<()> {
     // setup logger
     pretty_env_logger::init();
     info!("pie server starting up!");
+
+    // server directories setup
+    create_logs_dir().expect("unable to create logs dir");
 
     // setup http server
     let mut app = tide::new();

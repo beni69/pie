@@ -5,7 +5,7 @@ use directories::ProjectDirs;
 mod pie;
 
 #[derive(Parser, Debug)]
-#[clap(version = "0.1.0-alpha.1", author = "beni69 <beni@karesz.xyz>")]
+#[clap(version = env!("CARGO_PKG_VERSION"), author = "beni69 <beni@karesz.xyz>")]
 struct Cli {
     #[clap(short, long, default_value = "http://127.0.0.1:6969")]
     url: String,

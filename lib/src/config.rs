@@ -217,6 +217,14 @@ fn npm_yarn_run(cmd: &str, yarn: bool) -> String {
     }
 }
 
+// === CLI Config ===
+
+// TODO: parse cli config file
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CliConfig {
+    pub server_url: Option<String>,
+}
+
 fn value_or_def<T>(value: Option<T>, def: Option<T>) -> Option<T> {
     if value.is_some() {
         return value;
