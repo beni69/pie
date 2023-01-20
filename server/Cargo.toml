@@ -9,7 +9,7 @@ pie-lib = { path = "../lib" }
 async-std = { version = "1", features = ["attributes"] }
 directories = "4.0.1"
 driftwood = "0.0.6"
-git2 = "0.13.23"
+git2 = "0.16.1"
 lazy_static = "1.4.0"
 serde = { version = "1.0.130", features = ["derive"] }
 serde_json = "1.0.68"
